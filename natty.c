@@ -364,6 +364,41 @@ static int is_tcb_access(const UBYTE *p)
     return 0;
 }
 
+/* System list offsets in ExecBase */
+#define LIB_LIST_OFFSET     0x20
+#define DEVICE_LIST_OFFSET  0x24
+#define RESOURCE_LIST_OFFSET 0x28
+#define PORT_LIST_OFFSET    0x2C
+#define TASK_READY_OFFSET   0x30
+#define TASK_WAIT_OFFSET    0x34
+#define SEMAPHORE_LIST_OFFSET 0x38
+#define SIGNAL_SEMAPHORE_LIST_OFFSET 0x3C
+#define MEM_LIST_OFFSET     0x40
+#define MEM_CHUNK_OFFSET    0x44
+#define MEM_ENTRY_OFFSET    0x48
+
+static int is_system_list_access(const UBYTE *p)
+{
+    /* Check for direct access to system lists via ExecBase */
+    if (p[0] == 0x20 && p[1] == 0x3C) {  /* MOVE.L #imm, */
+        ULONG addr = (p[2]<<24)|(p[3]<<16)|(p[4]<<8)|p[5];
+        /* Check for known system list offsets */
+        if (addr == LIB_LIST_OFFSET || 
+            addr == DEVICE_LIST_OFFSET ||
+            addr == RESOURCE_LIST_OFFSET ||
+            addr == PORT_LIST_OFFSET ||
+            addr == TASK_READY_OFFSET ||
+            addr == TASK_WAIT_OFFSET ||
+            addr == SEMAPHORE_LIST_OFFSET ||
+            addr == SIGNAL_SEMAPHORE_LIST_OFFSET ||
+            addr == MEM_LIST_OFFSET ||
+            addr == MEM_CHUNK_OFFSET ||
+            addr == MEM_ENTRY_OFFSET)
+            return 1;
+    }
+    return 0;
+}
+
 static int is_list_manipulation(const UBYTE *p)
 {
     /* Check for List structure manipulation patterns */
@@ -373,6 +408,7 @@ static int is_list_manipulation(const UBYTE *p)
         if (addr == 0x00 || addr == 0x04 || addr == 0x08)   /* LH_HEAD, LH_TAIL, LH_TAILPRED */
             return 1;
     }
+    
     /* Check for common list operation patterns */
     if ((p[0] == 0x20 && p[1] == 0x68) ||  /* MOVE.L (a0,d0), */
         (p[0] == 0x20 && p[1] == 0x69) ||  /* MOVE.L (a1,d0), */
@@ -382,6 +418,29 @@ static int is_list_manipulation(const UBYTE *p)
         if (p[2] == 0x00 || p[2] == 0x04 || p[2] == 0x08)
             return 1;
     }
+    
+    /* Check for list node manipulation */
+    if ((p[0] == 0x20 && p[1] == 0x50) ||  /* MOVE.L (a0), */
+        (p[0] == 0x20 && p[1] == 0x51) ||  /* MOVE.L (a1), */
+        (p[0] == 0x20 && p[1] == 0x52))    /* MOVE.L (a2), */
+    {
+        /* This could be LN_SUCC or LN_PRED access */
+        return 1;
+    }
+    
+    /* Check for list node insertion/removal patterns */
+    if ((p[0] == 0x20 && p[1] == 0x58) ||  /* MOVE.L (a0)+, */
+        (p[0] == 0x20 && p[1] == 0x59) ||  /* MOVE.L (a1)+, */
+        (p[0] == 0x20 && p[1] == 0x5A))    /* MOVE.L (a2)+, */
+    {
+        /* This could be list node traversal */
+        return 1;
+    }
+    
+    /* Check for system list access */
+    if (is_system_list_access(p))
+        return 1;
+        
     return 0;
 }
 
@@ -673,6 +732,14 @@ static int scan_segment(const UBYTE *p, ULONG size, int *risk,
             add_finding(report, "Stack Manipulation", 
                        "Unusual stack manipulation detected", current_offset, 20);
             p += 2; continue;
+        }
+
+        /* Check for system list access */
+        if (is_system_list_access(p)) {
+            *risk += 35;
+            add_finding(report, "System List Access", 
+                       "Direct access to system list structure", current_offset, 35);
+            p += 6; continue;
         }
 
         p += 2;
