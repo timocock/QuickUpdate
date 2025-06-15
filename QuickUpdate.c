@@ -90,6 +90,25 @@ static Object *MainWindowObj = NULL;
 static struct Menu *MainMenu = NULL;
 static struct AppWindow *AppWindow = NULL;
 
+// Add after the existing #define statements
+#define NUM_STD_LOCATIONS 8
+
+struct SystemLocation {
+    const char *path;
+    const char *description;
+    const char *extensions;
+};
+
+static const struct SystemLocation stdLocations[NUM_STD_LOCATIONS] = {
+    { "LIBS:", "Libraries", ".library" },
+    { "DEVS:", "Devices", ".device" },
+    { "DEVS:Networks/", "Network Devices", ".device" },
+    { "DEVS:Printers/", "Printer Devices", ".device" },
+    { "SYS:Classes/DataTypes/", "DataTypes", ".datatype" },
+    { "SYS:Classes/Gadgets/", "Gadgets", ".gadget" },
+    { "SYS:Classes/MUI/", "MUI Classes", ".mcc" }
+};
+
 BOOL CalculateChecksum(const char *filename)
 {
     BPTR fh;
@@ -418,21 +437,55 @@ const char *GetDestPath(const char *filename)
 {
     static char destpath[256];
     const char *basename = FilePart(filename);
+    const char *ext = strrchr(basename, '.');
     
-    // Determine the correct destination based on file extension
-    const char *ext = FilePart(filename);
-    ext = strrchr(ext, '.');
-    if (ext && stricmp(ext, ".library") == 0)
-        strcpy(destpath, "LIBS:");
-    else if (strstr(filename, ".device"))
-        strcpy(destpath, "DEVS:");
-    else if (strstr(filename, ".datatype"))
-        strcpy(destpath, "SYS:Classes/DataTypes/");
-    else
-        return NULL;
+    if (!ext) return NULL;
+    ext++; // Skip the dot
     
-    AddPart(destpath, basename, sizeof(destpath));
-    return destpath;
+    // Find matching standard location
+    for (int i = 0; i < NUM_STD_LOCATIONS; i++)
+    {
+        if (stricmp(ext, stdLocations[i].extensions + 1) == 0)
+        {
+            strcpy(destpath, stdLocations[i].path);
+            AddPart(destpath, basename, sizeof(destpath));
+            return destpath;
+        }
+    }
+    
+    return NULL;
+}
+
+BOOL IsStandardSystemLocation(const char *path)
+{
+    char dirpath[256];
+    strcpy(dirpath, path);
+    char *lastslash = strrchr(dirpath, '/');
+    if (lastslash) *lastslash = '\0';
+    else return FALSE;
+    
+    for (int i = 0; i < NUM_STD_LOCATIONS; i++)
+    {
+        if (stricmp(dirpath, stdLocations[i].path) == 0)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+const char *GetLocationDescription(const char *path)
+{
+    char dirpath[256];
+    strcpy(dirpath, path);
+    char *lastslash = strrchr(dirpath, '/');
+    if (lastslash) *lastslash = '\0';
+    else return "Unknown Location";
+    
+    for (int i = 0; i < NUM_STD_LOCATIONS; i++)
+    {
+        if (stricmp(dirpath, stdLocations[i].path) == 0)
+            return stdLocations[i].description;
+    }
+    return "Unknown Location";
 }
 
 BOOL HandleGUI(void)
@@ -550,6 +603,7 @@ void ProcessFile(const char *filepath)
     char statusText[256];
     BOOL hasCurrentVersion;
     LONG cmp;
+    const char *destPath;
     
     SetStatusText("Checking file...");
     
@@ -559,67 +613,90 @@ void ProcessFile(const char *filepath)
         return;
     }
     
-    hasCurrentVersion = GetInstalledVersion(filepath, &currentInfo);
+    destPath = GetDestPath(filepath);
+    if (!destPath)
+    {
+        SetStatusText("Error: Not a valid system component file");
+        return;
+    }
+    
+    hasCurrentVersion = GetInstalledVersion(destPath, &currentInfo);
     
     if (hasCurrentVersion)
     {
-        sprintf(statusText, "Current: v%ld.%ld (%ld) - New: v%ld.%ld (%ld)",
-                currentInfo.version, currentInfo.revision, currentInfo.date,
-                newInfo.version, newInfo.revision, newInfo.date);
+        sprintf(statusText, "Current: v%ld.%ld (%s) - New: v%ld.%ld (%s)",
+                currentInfo.version, currentInfo.revision, currentInfo.origin,
+                newInfo.version, newInfo.revision, newInfo.origin);
         SetStatusText(statusText);
         
         cmp = CompareVersions(&currentInfo, &newInfo);
         if (cmp > 0)
         {
             // Newer version
-            Printf("New version available from %s\n", newInfo.origin);
-            if (args.force)
+            char msg[512];
+            sprintf(msg, "New version available from %s\n"
+                        "Current: v%ld.%ld (%s)\n"
+                        "New: v%ld.%ld (%s)\n"
+                        "Location: %s\n"
+                        "Would you like to install the newer version?",
+                        newInfo.origin,
+                        currentInfo.version, currentInfo.revision, currentInfo.origin,
+                        newInfo.version, newInfo.revision, newInfo.origin,
+                        GetLocationDescription(destPath));
+                        
+            struct EasyStruct es = {
+                sizeof(struct EasyStruct),
+                0,
+                "Update Available",
+                msg,
+                "Install|Cancel"
+            };
+            
+            if (EasyRequest(MainWindow, &es, NULL, NULL) == 1)
             {
-                InstallFile(filepath, GetDestPath(filepath));
-            }
-            else
-            {
-                // Prompt with origin info
-                Printf("Current: v%ld.%ld (%s)\nNew: v%ld.%ld (%s)\n",
-                    currentInfo.version, currentInfo.revision, currentInfo.origin,
-                    newInfo.version, newInfo.revision, newInfo.origin);
-                if (GetUserResponse())
+                if (InstallFile(filepath, destPath))
                 {
-                    InstallFile(filepath, GetDestPath(filepath));
+                    SetStatusText("Update completed successfully");
+                }
+                else
+                {
+                    SetStatusText("Update failed!");
                 }
             }
         }
         else if (cmp < 0)
         {
-            Printf("Warning: New file is older than installed version!\n");
-            if (args.force)
-            {
-                Printf("Forcing installation...\n");
-                InstallFile(filepath, GetDestPath(filepath));
-            }
+            sprintf(statusText, "Warning: New file is older than installed version!\n"
+                              "Current: v%ld.%ld (%s)\n"
+                              "New: v%ld.%ld (%s)",
+                    currentInfo.version, currentInfo.revision, currentInfo.origin,
+                    newInfo.version, newInfo.revision, newInfo.origin);
+            SetStatusText(statusText);
         }
         else
         {
-            Printf("File versions are identical\n");
+            SetStatusText("File versions are identical");
         }
     }
     else
     {
-        sprintf(statusText, "New file: v%ld.%ld (%ld)",
-                newInfo.version, newInfo.revision, newInfo.date);
+        sprintf(statusText, "New file: v%ld.%ld (%s)\n"
+                          "Location: %s",
+                newInfo.version, newInfo.revision, newInfo.origin,
+                GetLocationDescription(destPath));
         SetStatusText(statusText);
         
         struct EasyStruct es = {
             sizeof(struct EasyStruct),
             0,
             "Install New File",
-            "Would you like to install this file?",
+            statusText,
             "Install|Cancel"
         };
         
         if (EasyRequest(MainWindow, &es, NULL, NULL) == 1)
         {
-            if (InstallFile(filepath, GetDestPath(filepath)))
+            if (InstallFile(filepath, destPath))
             {
                 SetStatusText("Installation completed successfully");
             }
