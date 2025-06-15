@@ -22,6 +22,7 @@ struct Entry {
     UWORD revision;
     ULONG date;
     BOOL isNew;
+    char origin[64];
 };
 
 static const char template[] = "FOLDER/A,ALL/S,ORIGIN/K";
@@ -68,11 +69,11 @@ BOOL LoadExistingDB(void)
             
             struct Entry *entry = &entries[numEntries];
             
-            // Parse line: CHECKSUM|FILENAME|VERSION.REVISION|DATE|ORIGIN
-            if (sscanf(line, "%lx|%lu|%[^|]|%hu.%hu|%lu|",
+            // Parse line: CHECKSUM|FILESIZE|FILENAME|VERSION.REVISION|DATE|ORIGIN
+            if (sscanf(line, "%lx|%lu|%[^|]|%hu.%hu|%lu|%[^\n]",
                       &entry->checksum, &entry->filesize, entry->filename,
                       &entry->version, &entry->revision,
-                      &entry->date) == 6)
+                      &entry->date, entry->origin) == 7)
             {
                 entry->isNew = FALSE;
                 numEntries++;
@@ -82,6 +83,10 @@ BOOL LoadExistingDB(void)
                     Printf("Warning: Maximum entries reached\n");
                     break;
                 }
+            }
+            else
+            {
+                Printf("Warning: Skipping invalid entry in database\n");
             }
             FreeVec(line);
         }
@@ -221,7 +226,7 @@ BOOL SaveDatabase(const char *origin)
                            entries[i].version,
                            entries[i].revision,
                            entries[i].date,
-                           entries[i].isNew ? origin : "") == -1)
+                           entries[i].isNew ? origin : entries[i].origin) == -1)
                 {
                     Printf("Error writing database entry %ld\n", i);
                     writeError = TRUE;
@@ -359,59 +364,90 @@ LONG _main(LONG argc, char **argv)
             rdargs = ReadArgs(template, (LONG *)&args, NULL);
             if (rdargs)
             {
-                if (LoadExistingDB())
+                if (args.folder)
                 {
-                    LONG startEntries = numEntries;
-                    
-                    Printf("Scanning directory: %s\n", (LONG)args.folder);
-                    ScanDirectory(args.folder, args.all);
-                    
-                    // Check if break was received during scan
-                    if (break_signal_received)
+                    if (LoadExistingDB())
                     {
-                        Printf("\n*** Break received - aborting ***\n");
-                        goto cleanup;
-                    }
-                    
-                    newEntries = numEntries - startEntries;
-                    Printf("\nFound %ld new files\n", newEntries);
-                    
-                    if (newEntries > 0)
-                    {
-                        if (args.origin)
+                        LONG startEntries = numEntries;
+                        
+                        Printf("Scanning directory: %s\n", (LONG)args.folder);
+                        ScanDirectory(args.folder, args.all);
+                        
+                        // Check if break was received during scan
+                        if (break_signal_received)
                         {
-                            strncpy(origin, args.origin, sizeof(origin)-1);
+                            Printf("\n*** Break received - aborting ***\n");
+                            goto cleanup;
+                        }
+                        
+                        newEntries = numEntries - startEntries;
+                        Printf("\nFound %ld new files\n", newEntries);
+                        
+                        if (newEntries > 0)
+                        {
+                            if (args.origin)
+                            {
+                                strncpy(origin, args.origin, sizeof(origin)-1);
+                                origin[sizeof(origin)-1] = '\0';
+                            }
+                            else
+                            {
+                                Printf("Enter origin for new entries: ");
+                                if (FGets(Input(), origin, sizeof(origin)))
+                                {
+                                    // Remove newline
+                                    char *nl = strchr(origin, '\n');
+                                    if (nl) *nl = '\0';
+                                }
+                                else
+                                {
+                                    Printf("Error reading origin input\n");
+                                    goto cleanup;
+                                }
+                            }
+                            
+                            // Once we start writing, we complete even if break received
+                            if (SaveDatabase(origin))
+                            {
+                                Printf("Database updated successfully\n");
+                                result = RETURN_OK;
+                            }
                         }
                         else
                         {
-                            Printf("Enter origin for new entries: ");
-                            if (FGets(Input(), origin, sizeof(origin)))
-                            {
-                                // Remove newline
-                                char *nl = strchr(origin, '\n');
-                                if (nl) *nl = '\0';
-                            }
-                        }
-                        
-                        // Once we start writing, we complete even if break received
-                        if (SaveDatabase(origin))
-                        {
-                            Printf("Database updated successfully\n");
+                            Printf("No new entries found\n");
                             result = RETURN_OK;
                         }
                     }
                     else
                     {
-                        Printf("No new entries found\n");
-                        result = RETURN_OK;
+                        Printf("Error loading existing database\n");
                     }
+                }
+                else
+                {
+                    Printf("Error: FOLDER argument is required\n");
+                    Printf("Usage: CreateDB FOLDER=<path> [ALL/S] [ORIGIN=<text>]\n");
                 }
             cleanup:
                 FreeArgs(rdargs);
             }
+            else
+            {
+                Printf("Error parsing arguments\n");
+                Printf("Usage: CreateDB FOLDER=<path> [ALL/S] [ORIGIN=<text>]\n");
+            }
             FreeMem(entries, sizeof(struct Entry) * MAX_ENTRIES);
         }
+        else
+        {
+            Printf("Error: Out of memory\n");
+        }
         CloseLibrary((struct Library *)DOSBase);
+    }
+    else
+    {
+        Printf("Error: Could not open dos.library\n");
     }
     
     // Restore break signal handling
