@@ -88,6 +88,7 @@ struct ChecksumEntry {
 static struct Window *MainWindow = NULL;
 static Object *MainWindowObj = NULL;
 static struct Menu *MainMenu = NULL;
+static struct AppWindow *AppWindow = NULL;
 
 BOOL CalculateChecksum(const char *filename)
 {
@@ -664,23 +665,27 @@ BOOL HandleAppMessage(struct AppMessage *msg)
 
 BOOL CreateAppIcon(void)
 {
-    if ((AppPort = CreateMsgPort()))
+    if (!AppPort)
     {
-        if ((AppIcon = GetDiskObject("PROGDIR:QuickUpdate")))
+        if ((AppPort = CreateMsgPort()))
         {
-            // Set up AppIcon
-            AppIcon->do_Type = WBPROJECT;  // Allow drops
-            
-            if (AddAppIconA(0, 0, "QuickUpdate",
-                           AppPort, NULL, AppIcon, NULL))
+            if ((AppIcon = GetDiskObject("PROGDIR:QuickUpdate")))
             {
-                return TRUE;
+                AppIcon->do_Type = WBPROJECT;
+                AppIcon->do_CurrentX = 0;
+                AppIcon->do_CurrentY = 0;
+                
+                if (AddAppIconA(0, 0, "QuickUpdate",
+                               AppPort, NULL, AppIcon, NULL))
+                {
+                    return TRUE;
+                }
+                FreeDiskObject(AppIcon);
+                AppIcon = NULL;
             }
-            FreeDiskObject(AppIcon);
-            AppIcon = NULL;
+            DeleteMsgPort(AppPort);
+            AppPort = NULL;
         }
-        DeleteMsgPort(AppPort);
-        AppPort = NULL;
     }
     return FALSE;
 }
@@ -899,38 +904,181 @@ BOOL CheckFileVersion(const char *filename, struct VersionInfo *info)
 
 BOOL HandleWorkbench(void)
 {
-    struct MsgPort *port;
-    struct IntuiMessage *msg;
-    ULONG result;
-    ULONG code;
-    BOOL done = FALSE;
+    struct WBStartup *wbmsg;
+    struct AppMessage *appmsg;
+    BOOL running = TRUE;
+    ULONG signals;
     
-    port = CreateMsgPort();
-    if (!port) return FALSE;
+    if (!CreateAppIcon())
+        return FALSE;
     
-    while (!done)
+    if (!CreateMainWindow())
+        return FALSE;
+    
+    signals = (1L << AppPort->mp_SigBit) | (1L << MainWindow->UserPort->mp_SigBit);
+    
+    while (running)
     {
-        WaitPort(port);
-        while ((msg = (struct IntuiMessage *)GetMsg(port)))
+        ULONG result = Wait(signals);
+        
+        // Check for AppIcon messages
+        if (result & (1L << AppPort->mp_SigBit))
         {
-            result = msg->Class;
-            code = msg->Code;
-            ReplyMsg((struct Message *)msg);
-            
-            switch (result)
+            while ((appmsg = (struct AppMessage *)GetMsg(AppPort)))
             {
-                case IDCMP_CLOSEWINDOW:
-                    done = TRUE;
-                    break;
-                    
-                case IDCMP_GADGETUP:
-                    // Handle gadget events
-                    break;
+                if (appmsg->am_Type == AMTYPE_APPWINDOW)
+                {
+                    // Handle file drop on AppIcon
+                    if (appmsg->am_NumArgs == 1)
+                    {
+                        char filepath[256];
+                        NameFromLock(appmsg->am_ArgList[0].wa_Lock, filepath, sizeof(filepath));
+                        AddPart(filepath, appmsg->am_ArgList[0].wa_Name, sizeof(filepath));
+                        
+                        if (IsValidFileType(filepath))
+                        {
+                            // Open window if iconified
+                            if (!MainWindow && MainWindowObj)
+                            {
+                                if ((MainWindow = (struct Window *)RA_OpenWindow(MainWindowObj)))
+                                {
+                                    SetMenuStrip(MainWindow, MainMenu);
+                                }
+                            }
+                            ProcessFile(filepath);
+                        }
+                    }
+                }
+                ReplyMsg((struct Message *)appmsg);
+            }
+        }
+        
+        // Check for window messages
+        if (result & (1L << MainWindow->UserPort->mp_SigBit))
+        {
+            struct IntuiMessage *msg;
+            while ((msg = (struct IntuiMessage *)GetMsg(MainWindow->UserPort)))
+            {
+                switch (msg->Class)
+                {
+                    case IDCMP_CLOSEWINDOW:
+                        running = FALSE;
+                        break;
+                        
+                    case IDCMP_MENUPICK:
+                        {
+                            struct MenuItem *item;
+                            UWORD code = msg->Code;
+                            while ((item = ItemAddress(MainMenu, code)))
+                            {
+                                switch ((ULONG)GTMENUITEM_USERDATA(item))
+                                {
+                                    case ID_OPEN:
+                                        ShowFileRequester();
+                                        break;
+                                        
+                                    case ID_ABOUT:
+                                        ShowAboutRequester();
+                                        break;
+                                        
+                                    case ID_QUIT:
+                                        running = FALSE;
+                                        break;
+                                }
+                                code = item->NextSelect;
+                            }
+                        }
+                        break;
+                        
+                    case IDCMP_ICONIFY:
+                        if (MainWindowObj)
+                        {
+                            RA_Iconify(MainWindowObj);
+                            MainWindow = NULL;
+                        }
+                        break;
+                        
+                    case IDCMP_UNICONIFY:
+                        if ((MainWindow = (struct Window *)RA_OpenWindow(MainWindowObj)))
+                        {
+                            SetMenuStrip(MainWindow, MainMenu);
+                        }
+                        break;
+                }
+                ReplyMsg((struct Message *)msg);
             }
         }
     }
     
-    DeleteMsgPort(port);
+    // Cleanup
+    if (MainWindow)
+    {
+        ClearMenuStrip(MainWindow);
+        RA_CloseWindow(MainWindowObj);
+    }
+    if (MainMenu)
+        FreeMenus(MainMenu);
+    if (MainWindowObj)
+        DisposeObject(MainWindowObj);
+    if (AppIcon)
+    {
+        RemoveAppIcon(AppIcon);
+        FreeDiskObject(AppIcon);
+    }
+    if (AppPort)
+        DeleteMsgPort(AppPort);
+        
+    return TRUE;
+}
+
+BOOL CreateMainWindow(void)
+{
+    if (!MainWindowObj)
+    {
+        MainWindowObj = WindowObject,
+            WA_Title, "QuickUpdate",
+            WA_Width, 400,
+            WA_Height, 200,
+            WA_Flags, WFLG_DRAGBAR | WFLG_DEPTHGADGET | WFLG_CLOSEGADGET | WFLG_SIZEGADGET,
+            WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_MENUPICK | IDCMP_GADGETUP | IDCMP_ICONIFY | IDCMP_UNICONIFY | IDCMP_RAWKEY,
+            WA_AppWindow, TRUE,
+            WA_AppPort, AppPort,
+            WA_AppWindowFallBack, TRUE,
+            WA_AppWindowMessage, TRUE,
+            WA_AppWindowSigMask, SIGBREAKF_CTRL_C,
+            WINDOW_ParentGroup, VGroupObject,
+                GA_RelWidth, ~0,
+                GA_RelHeight, ~0,
+                Child, StatusText = TextObject,
+                    GA_RelWidth, ~0,
+                    GA_RelHeight, ~0,
+                    TextFrame,
+                    TextContents, "Ready",
+                End,
+            End,
+        End;
+
+        if (!MainWindowObj)
+            return FALSE;
+
+        MainWindow = (struct Window *)RA_OpenWindow(MainWindowObj);
+        if (!MainWindow)
+            return FALSE;
+
+        // Create menu
+        MainMenu = CreateMenu(NewMenu,
+            "Project", 0, 0, 0,
+                MenuItem, "Open...", "O", ID_OPEN,
+                MenuItem, "About...", "A", ID_ABOUT,
+                MenuItem, "Quit", "Q", ID_QUIT,
+            End,
+        End);
+
+        if (!MainMenu)
+            return FALSE;
+
+        SetMenuStrip(MainWindow, MainMenu);
+    }
     return TRUE;
 }
 
