@@ -95,18 +95,20 @@ static struct AppWindow *AppWindow = NULL;
 
 struct SystemLocation {
     const char *path;
-    const char *description;
     const char *extensions;
+    const char *description;
 };
 
-static const struct SystemLocation stdLocations[NUM_STD_LOCATIONS] = {
-    { "LIBS:", "Libraries", ".library" },
-    { "DEVS:", "Devices", ".device" },
-    { "DEVS:Networks/", "Network Devices", ".device" },
-    { "DEVS:Printers/", "Printer Devices", ".device" },
-    { "SYS:Classes/DataTypes/", "DataTypes", ".datatype" },
-    { "SYS:Classes/Gadgets/", "Gadgets", ".gadget" },
-    { "SYS:Classes/MUI/", "MUI Classes", ".mcc" }
+// Update the system locations array
+const struct SystemLocation stdLocations[] = {
+    { "LIBS:", ".library", "Library files" },
+    { "DEVS:", ".device", "Device drivers" },
+    { "SYS:Classes/Datatypes", ".datatype", "Datatype classes" },
+    { "DEVS:Datatypes", ".datatype", "Datatype descriptors" },
+    { "SYS:Classes/Gadgets", ".gadget", "Gadget classes" },
+    { "SYS:Classes", ".class", "BOOPSI classes" },
+    { "SYS:Classes/MUI", ".mcc", "MUI custom classes" },
+    { "SYS:Classes/MUI", ".mcp", "MUI custom public classes" }
 };
 
 BOOL CalculateChecksum(const char *filename)
@@ -1239,13 +1241,82 @@ BOOL IsLibrary(const char *filename)
     return FALSE;
 }
 
-// Add after the existing system location definitions
+// Update PathsMatch to ensure case-insensitive comparison
+BOOL PathsMatch(const char *path1, const char *path2)
+{
+    char resolved1[256];
+    char resolved2[256];
+    char *lastslash;
+    
+    // Resolve first path
+    if (!ResolveAssign(path1, resolved1, sizeof(resolved1)))
+        return FALSE;
+        
+    // Resolve second path
+    if (!ResolveAssign(path2, resolved2, sizeof(resolved2)))
+        return FALSE;
+    
+    // Remove trailing slashes
+    lastslash = strrchr(resolved1, '/');
+    if (lastslash && lastslash[1] == '\0')
+        *lastslash = '\0';
+        
+    lastslash = strrchr(resolved2, '/');
+    if (lastslash && lastslash[1] == '\0')
+        *lastslash = '\0';
+    
+    // Convert both paths to lowercase for comparison
+    char lower1[256];
+    char lower2[256];
+    strncpy(lower1, resolved1, sizeof(lower1) - 1);
+    lower1[sizeof(lower1) - 1] = '\0';
+    strncpy(lower2, resolved2, sizeof(lower2) - 1);
+    lower2[sizeof(lower2) - 1] = '\0';
+    
+    // Convert to lowercase
+    for (char *p = lower1; *p; p++) *p = tolower(*p);
+    for (char *p = lower2; *p; p++) *p = tolower(*p);
+    
+    // Compare resolved paths case-insensitively
+    return (strcmp(lower1, lower2) == 0);
+}
+
+// Update GetCorrectSystemLocation to handle datatype files specially
 const char *GetCorrectSystemLocation(const char *filename)
 {
     const char *ext = strrchr(FilePart(filename), '.');
     if (!ext) return NULL;
     ext++; // Skip the dot
     
+    // Special handling for datatype files
+    if (stricmp(ext, "datatype") == 0)
+    {
+        // Check if it's a descriptor file (usually small, < 1KB)
+        BPTR lock = Lock(filename, ACCESS_READ);
+        if (lock)
+        {
+            struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
+            if (fib)
+            {
+                if (Examine(lock, fib))
+                {
+                    // If it's a small file, it's likely a descriptor
+                    if (fib->fib_Size < 1024)
+                    {
+                        FreeDosObject(DOS_FIB, fib);
+                        UnLock(lock);
+                        return "DEVS:Datatypes";
+                    }
+                }
+                FreeDosObject(DOS_FIB, fib);
+            }
+            UnLock(lock);
+        }
+        // If it's not a descriptor, it's a datatype class
+        return "SYS:Classes/Datatypes";
+    }
+    
+    // Handle other file types
     for (int i = 0; i < NUM_STD_LOCATIONS; i++)
     {
         if (stricmp(ext, stdLocations[i].extensions + 1) == 0)
@@ -1313,31 +1384,4 @@ BOOL ResolveAssign(const char *path, char *resolved, size_t size)
     
     UnLockDosList(LDF_DEVICES | LDF_ASSIGNS | LDF_READ);
     return TRUE;
-}
-
-BOOL PathsMatch(const char *path1, const char *path2)
-{
-    char resolved1[256];
-    char resolved2[256];
-    char *lastslash;
-    
-    // Resolve first path
-    if (!ResolveAssign(path1, resolved1, sizeof(resolved1)))
-        return FALSE;
-        
-    // Resolve second path
-    if (!ResolveAssign(path2, resolved2, sizeof(resolved2)))
-        return FALSE;
-    
-    // Remove trailing slashes
-    lastslash = strrchr(resolved1, '/');
-    if (lastslash && lastslash[1] == '\0')
-        *lastslash = '\0';
-        
-    lastslash = strrchr(resolved2, '/');
-    if (lastslash && lastslash[1] == '\0')
-        *lastslash = '\0';
-    
-    // Compare resolved paths
-    return (stricmp(resolved1, resolved2) == 0);
 }
