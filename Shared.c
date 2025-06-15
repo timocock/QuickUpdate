@@ -218,6 +218,8 @@ BOOL LoadDatabaseEntry(const char *line, ULONG lineNum)
 {
     LONG separators = 0;
     const char *p;
+    struct ChecksumEntry entry;
+    char *endptr;
     
     if (strlen(line) > 512)
     {
@@ -234,6 +236,68 @@ BOOL LoadDatabaseEntry(const char *line, ULONG lineNum)
         Printf("Error: Corrupt entry at line %ld (wrong format)\n", lineNum);
         return FALSE;
     }
+    
+    // Parse checksum (hex)
+    entry.checksum = strtoul(line, &endptr, 16);
+    if (*endptr != '|')
+    {
+        Printf("Error: Invalid checksum at line %ld\n", lineNum);
+        return FALSE;
+    }
+    
+    // Parse filesize
+    entry.filesize = strtoul(endptr + 1, &endptr, 10);
+    if (*endptr != '|')
+    {
+        Printf("Error: Invalid filesize at line %ld\n", lineNum);
+        return FALSE;
+    }
+    
+    // Parse filename
+    p = endptr + 1;
+    endptr = strchr(p, '|');
+    if (!endptr || (endptr - p) >= sizeof(entry.filename))
+    {
+        Printf("Error: Invalid filename at line %ld\n", lineNum);
+        return FALSE;
+    }
+    strncpy(entry.filename, p, endptr - p);
+    entry.filename[endptr - p] = '\0';
+    
+    // Parse version.revision
+    p = endptr + 1;
+    entry.version = (UWORD)strtoul(p, &endptr, 10);
+    if (*endptr != '.')
+    {
+        Printf("Error: Invalid version format at line %ld\n", lineNum);
+        return FALSE;
+    }
+    entry.revision = (UWORD)strtoul(endptr + 1, &endptr, 10);
+    if (*endptr != '|')
+    {
+        Printf("Error: Invalid revision format at line %ld\n", lineNum);
+        return FALSE;
+    }
+    
+    // Parse date
+    entry.date = strtoul(endptr + 1, &endptr, 10);
+    if (*endptr != '|')
+    {
+        Printf("Error: Invalid date at line %ld\n", lineNum);
+        return FALSE;
+    }
+    
+    // Parse origin
+    p = endptr + 1;
+    endptr = strchr(p, '\n');
+    if (!endptr) endptr = p + strlen(p);
+    if ((endptr - p) >= sizeof(entry.origin))
+    {
+        Printf("Error: Origin too long at line %ld\n", lineNum);
+        return FALSE;
+    }
+    strncpy(entry.origin, p, endptr - p);
+    entry.origin[endptr - p] = '\0';
     
     return TRUE;
 } 

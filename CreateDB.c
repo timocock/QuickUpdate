@@ -130,7 +130,8 @@ void ScanDirectory(const char *path, BOOL recursive)
                     {
                         if (recursive)
                         {
-                            strcpy(fullpath, path);
+                            strncpy(fullpath, path, MAX_PATH - 1);
+                            fullpath[MAX_PATH - 1] = '\0';
                             AddPart(fullpath, fib->fib_FileName, MAX_PATH);
                             ScanDirectory(fullpath, TRUE);
                         }
@@ -139,7 +140,8 @@ void ScanDirectory(const char *path, BOOL recursive)
                     {
                         if (IsValidFileType(fib->fib_FileName))
                         {
-                            strcpy(fullpath, path);
+                            strncpy(fullpath, path, MAX_PATH - 1);
+                            fullpath[MAX_PATH - 1] = '\0';
                             AddPart(fullpath, fib->fib_FileName, MAX_PATH);
                             
                             ULONG checksum = CalculateChecksum(fullpath);
