@@ -632,7 +632,7 @@ void ProcessFile(const char *filepath)
             if (lastslash) *lastslash = '\0';
             else return;
             
-            if (stricmp(currentDir, correctLocation) != 0)
+            if (!PathsMatch(currentDir, correctLocation))
             {
                 // File is in wrong system location
                 sprintf(statusText, "Warning: File is in incorrect system location!\n\n"
@@ -1254,4 +1254,90 @@ const char *GetCorrectSystemLocation(const char *filename)
         }
     }
     return NULL;
+}
+
+// Add after the existing system location definitions
+BOOL ResolveAssign(const char *path, char *resolved, size_t size)
+{
+    struct DosList *dl;
+    char assign[256];
+    char *colon;
+    
+    // Copy path to work buffer
+    strncpy(assign, path, sizeof(assign) - 1);
+    assign[sizeof(assign) - 1] = '\0';
+    
+    // Find the colon
+    colon = strchr(assign, ':');
+    if (!colon) return FALSE;
+    
+    // Terminate at colon
+    *colon = '\0';
+    
+    // Lock the dos list
+    dl = LockDosList(LDF_DEVICES | LDF_ASSIGNS | LDF_READ);
+    if (!dl) return FALSE;
+    
+    // Find the assign
+    dl = FindDosEntry(dl, assign, LDF_DEVICES | LDF_ASSIGNS);
+    if (dl)
+    {
+        // Get the true path
+        if (dl->dol_Type == DLT_DEVICE)
+        {
+            // It's a device, use the device name
+            strncpy(resolved, dl->dol_Name, size - 1);
+            resolved[size - 1] = '\0';
+        }
+        else
+        {
+            // It's an assign, use the first path
+            struct AssignList *al = (struct AssignList *)BADDR(dl->dol_misc.dol_assign.dol_List);
+            if (al)
+            {
+                strncpy(resolved, (char *)BADDR(al->al_String), size - 1);
+                resolved[size - 1] = '\0';
+            }
+            else
+            {
+                UnLockDosList(LDF_DEVICES | LDF_ASSIGNS | LDF_READ);
+                return FALSE;
+            }
+        }
+    }
+    else
+    {
+        UnLockDosList(LDF_DEVICES | LDF_ASSIGNS | LDF_READ);
+        return FALSE;
+    }
+    
+    UnLockDosList(LDF_DEVICES | LDF_ASSIGNS | LDF_READ);
+    return TRUE;
+}
+
+BOOL PathsMatch(const char *path1, const char *path2)
+{
+    char resolved1[256];
+    char resolved2[256];
+    char *lastslash;
+    
+    // Resolve first path
+    if (!ResolveAssign(path1, resolved1, sizeof(resolved1)))
+        return FALSE;
+        
+    // Resolve second path
+    if (!ResolveAssign(path2, resolved2, sizeof(resolved2)))
+        return FALSE;
+    
+    // Remove trailing slashes
+    lastslash = strrchr(resolved1, '/');
+    if (lastslash && lastslash[1] == '\0')
+        *lastslash = '\0';
+        
+    lastslash = strrchr(resolved2, '/');
+    if (lastslash && lastslash[1] == '\0')
+        *lastslash = '\0';
+    
+    // Compare resolved paths
+    return (stricmp(resolved1, resolved2) == 0);
 }
