@@ -604,6 +604,7 @@ void ProcessFile(const char *filepath)
     BOOL hasCurrentVersion;
     LONG cmp;
     const char *destPath;
+    BOOL isInSystemLocation = FALSE;
     
     SetStatusText("Checking file...");
     
@@ -613,6 +614,33 @@ void ProcessFile(const char *filepath)
         return;
     }
     
+    // Check if file is already in a system location
+    isInSystemLocation = IsStandardSystemLocation(filepath);
+    
+    if (isInSystemLocation)
+    {
+        // File is already in system location, just show info
+        sprintf(statusText, "File Information:\n"
+                          "Version: v%ld.%ld\n"
+                          "Origin: %s\n"
+                          "Location: %s",
+                newInfo.version, newInfo.revision,
+                newInfo.origin,
+                GetLocationDescription(filepath));
+        SetStatusText(statusText);
+        
+        struct EasyStruct es = {
+            sizeof(struct EasyStruct),
+            0,
+            "File Information",
+            statusText,
+            "OK"
+        };
+        EasyRequest(MainWindow, &es, NULL, NULL);
+        return;
+    }
+    
+    // For files not in system locations, proceed with normal update process
     destPath = GetDestPath(filepath);
     if (!destPath)
     {
