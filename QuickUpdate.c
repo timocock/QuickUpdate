@@ -605,6 +605,7 @@ void ProcessFile(const char *filepath)
     LONG cmp;
     const char *destPath;
     BOOL isInSystemLocation = FALSE;
+    const char *correctLocation;
     
     SetStatusText("Checking file...");
     
@@ -614,12 +615,51 @@ void ProcessFile(const char *filepath)
         return;
     }
     
-    // Check if file is already in a system location
+    // Check if file is in any system location
     isInSystemLocation = IsStandardSystemLocation(filepath);
+    
+    // Get the correct location for this file type
+    correctLocation = GetCorrectSystemLocation(filepath);
     
     if (isInSystemLocation)
     {
-        // File is already in system location, just show info
+        // Check if it's in the correct location
+        if (correctLocation)
+        {
+            char currentDir[256];
+            strcpy(currentDir, filepath);
+            char *lastslash = strrchr(currentDir, '/');
+            if (lastslash) *lastslash = '\0';
+            else return;
+            
+            if (stricmp(currentDir, correctLocation) != 0)
+            {
+                // File is in wrong system location
+                sprintf(statusText, "Warning: File is in incorrect system location!\n\n"
+                                  "File Information:\n"
+                                  "Version: v%ld.%ld\n"
+                                  "Origin: %s\n"
+                                  "Current Location: %s\n"
+                                  "Correct Location: %s\n\n"
+                                  "This file should be moved to the correct system location.",
+                        newInfo.version, newInfo.revision,
+                        newInfo.origin,
+                        GetLocationDescription(filepath),
+                        GetLocationDescription(correctLocation));
+                        
+                struct EasyStruct es = {
+                    sizeof(struct EasyStruct),
+                    0,
+                    "Incorrect System Location",
+                    statusText,
+                    "OK"
+                };
+                EasyRequest(MainWindow, &es, NULL, NULL);
+                return;
+            }
+        }
+        
+        // File is in correct system location, just show info
         sprintf(statusText, "File Information:\n"
                           "Version: v%ld.%ld\n"
                           "Origin: %s\n"
@@ -1197,4 +1237,21 @@ BOOL IsLibrary(const char *filename)
         return TRUE;
     
     return FALSE;
+}
+
+// Add after the existing system location definitions
+const char *GetCorrectSystemLocation(const char *filename)
+{
+    const char *ext = strrchr(FilePart(filename), '.');
+    if (!ext) return NULL;
+    ext++; // Skip the dot
+    
+    for (int i = 0; i < NUM_STD_LOCATIONS; i++)
+    {
+        if (stricmp(ext, stdLocations[i].extensions + 1) == 0)
+        {
+            return stdLocations[i].path;
+        }
+    }
+    return NULL;
 }
