@@ -646,59 +646,11 @@ static int scan_segment(const UBYTE *p, ULONG size, int *risk,
             p += 4; continue;
         }
 
-        /* Check for ExecBase references */
-        if (is_execbase_ref(p)) {
-            *risk += 25;
-            add_finding(report, "ExecBase Access", 
-                       "Direct access to ExecBase (4.W)", current_offset, 25);
-            p += 6; continue;
-        }
-
-        /* Check for Chip RAM references */
-        if (is_chipmem_ref(p)) {
-            *risk += 30;
-            add_finding(report, "Chip RAM Access", 
-                       "Direct access to Chip RAM region", current_offset, 30);
-            p += 6; continue;
-        }
-
-        /* Check for ROM references */
-        if (is_rom_ref(p)) {
-            *risk += 25;
-            add_finding(report, "ROM Access", 
-                       "Direct access to ROM region", current_offset, 25);
-            p += 6; continue;
-        }
-
-        /* Check for vector patching */
-        if (is_vector_patch(p)) {
-            *risk += 35;
-            add_finding(report, "Vector Patching", 
-                       "Attempt to patch system vector", current_offset, 35);
-            p += 6; continue;
-        }
-
-        /* Check for trap calls */
-        if (is_trap_call(p)) {
-            *risk += 20;
-            add_finding(report, "Trap Call", 
-                       "Use of TRAP instruction", current_offset, 20);
-            p += 2; continue;
-        }
-
-        /* Check for TCB access */
-        if (is_tcb_access(p)) {
-            *risk += 30;
-            add_finding(report, "TCB Access", 
-                       "Direct access to Task Control Block", current_offset, 30);
-            p += 6; continue;
-        }
-
         /* Check for List manipulation */
         if (is_list_manipulation(p)) {
             *risk += 25;
             add_finding(report, "List Manipulation", 
-                       "Direct manipulation of system lists", current_offset, 25);
+                       "Direct manipulation of system list structures (LH_HEAD/LH_TAIL/LH_TAILPRED)", current_offset, 25);
             p += 6; continue;
         }
 
@@ -706,7 +658,7 @@ static int scan_segment(const UBYTE *p, ULONG size, int *risk,
         if (is_int_level_manip(p)) {
             *risk += 35;
             add_finding(report, "Interrupt Manipulation", 
-                       "Direct manipulation of interrupt levels", current_offset, 35);
+                       "Direct manipulation of INTENA/INTREQ registers or interrupt levels", current_offset, 35);
             p += 6; continue;
         }
 
@@ -714,7 +666,7 @@ static int scan_segment(const UBYTE *p, ULONG size, int *risk,
         if (is_vbr_manipulation(p)) {
             *risk += 40;
             add_finding(report, "VBR Manipulation", 
-                       "Attempt to modify Vector Base Register", current_offset, 40);
+                       "Attempt to modify Vector Base Register or vector table entries", current_offset, 40);
             p += 2; continue;
         }
 
@@ -722,7 +674,7 @@ static int scan_segment(const UBYTE *p, ULONG size, int *risk,
         if (is_self_modifying(p)) {
             *risk += 45;
             add_finding(report, "Self-Modifying Code", 
-                       "Code attempts to modify itself", current_offset, 45);
+                       "Code attempts to modify its own code segment or uses indirect code modification", current_offset, 45);
             p += 6; continue;
         }
 
@@ -730,7 +682,7 @@ static int scan_segment(const UBYTE *p, ULONG size, int *risk,
         if (is_stack_manipulation(p)) {
             *risk += 20;
             add_finding(report, "Stack Manipulation", 
-                       "Unusual stack manipulation detected", current_offset, 20);
+                       "Unusual stack manipulation detected (RTS/RTR/RTE/NOP/STOP)", current_offset, 20);
             p += 2; continue;
         }
 
@@ -738,8 +690,56 @@ static int scan_segment(const UBYTE *p, ULONG size, int *risk,
         if (is_system_list_access(p)) {
             *risk += 35;
             add_finding(report, "System List Access", 
-                       "Direct access to system list structure", current_offset, 35);
+                       "Direct access to system lists via ExecBase offsets (Library/Device/Resource/Port/Task/Memory lists)", current_offset, 35);
             p += 6; continue;
+        }
+
+        /* Check for TCB access */
+        if (is_tcb_access(p)) {
+            *risk += 30;
+            add_finding(report, "TCB Access", 
+                       "Direct access to Task Control Block or process structures (pr_Task/pr_CLI/pr_Console)", current_offset, 30);
+            p += 6; continue;
+        }
+
+        /* Check for ExecBase references */
+        if (is_execbase_ref(p)) {
+            *risk += 25;
+            add_finding(report, "ExecBase Access", 
+                       "Direct access to ExecBase (4.W) or system base structures", current_offset, 25);
+            p += 6; continue;
+        }
+
+        /* Check for Chip RAM references */
+        if (is_chipmem_ref(p)) {
+            *risk += 30;
+            add_finding(report, "Chip RAM Access", 
+                       "Direct access to Chip RAM region ($C00000-$DFFFFF)", current_offset, 30);
+            p += 6; continue;
+        }
+
+        /* Check for ROM references */
+        if (is_rom_ref(p)) {
+            *risk += 25;
+            add_finding(report, "ROM Access", 
+                       "Direct access to ROM region ($F80000+)", current_offset, 25);
+            p += 6; continue;
+        }
+
+        /* Check for vector patching */
+        if (is_vector_patch(p)) {
+            *risk += 35;
+            add_finding(report, "Vector Patching", 
+                       "Attempt to patch system vectors or interrupt handlers", current_offset, 35);
+            p += 6; continue;
+        }
+
+        /* Check for trap calls */
+        if (is_trap_call(p)) {
+            *risk += 20;
+            add_finding(report, "Trap Call", 
+                       "Use of TRAP instruction for supervisor mode entry", current_offset, 20);
+            p += 2; continue;
         }
 
         p += 2;
