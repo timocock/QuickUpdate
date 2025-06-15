@@ -1,0 +1,84 @@
+	sc NOSTKCHK NOMINC STRMERGE           DATA=NEAR CODE=NEAR           OPTIMIZE OPTIMIZETIME OPTIMIZERDEPTH=5           INCLUDEDIR=include: INCLUDEDIR=netinclude:           PARAMETERS=REGISTERS DEBUG=LINE SMALLCODE SMALLDATA OBJNAME=Shared.o Shared.c
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+
+====================
+static ULONG crc32_table[256][33;7m;[0m
+Shared.c 8 Warning 181: "crc32_table" was declared both static and external
+                        See line 32 file "shared.h"
+
+====================
+        if (StrToDate(&dt, (STRPTR)p[33;7m)[0m)
+Shared.c 130 Warning 87: argument count incorrect, expecting 1 arguments
+                         See line 185 file "include:clib/dos_protos.h"
+Shared.c 71 Warning 93: no reference to identifier "cd"
+AmigaZen:fork/Shared.c 130 Warning 409: Too many parameters for library call
+	sc NOSTKCHK NOMINC STRMERGE           DATA=NEAR CODE=NEAR           OPTIMIZE OPTIMIZETIME OPTIMIZERDEPTH=5           INCLUDEDIR=include: INCLUDEDIR=netinclude:           PARAMETERS=REGISTERS DEBUG=LINE SMALLCODE SMALLDATA OBJNAME=QuickUpdate.o QuickUpdate.c
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+
+====================
+#include <proto/reqtools.h>[0m
+quickupdate.h 8 Error 3: file not found "<proto/reqtools.h>"
+
+====================
+struct VersionInfo [33;7m{[0m
+QuickUpdate.c 23 Error 63: item "VersionInfo" already declared
+                           See line 13 file "shared.h"
+
+====================
+struct ChecksumEntry [33;7m{[0m
+QuickUpdate.c 78 Error 63: item "ChecksumEntry" already declared
+                           See line 21 file "shared.h"
+
+====================
+[33;7m{[0m
+QuickUpdate.c 93 Error 72: conflict with previous declaration
+                           See line 35 file "shared.h"
+
+====================
+    return Copy(filepath, backup_path,  0L [33;7m)[0m ? TRUE : FALSE;
+QuickUpdate.c 172 Warning 87: argument count incorrect, expecting 2 arguments
+                              See line 53 file "QuickUpdate.c"
+
+====================
+    return Copy(filepath, backup_path,  0L ) ?  1  :  0 [33;7m;[0m
+QuickUpdate.c 172 Warning 85: return value mismatch for function "BackupFile"
+                              Expecting "BOOL", found "int"
+
+====================
+f (!(IntuitionBase = (struct Library *)OpenLibrary("intuition.library", 37)[33;7m)[0m
+QuickUpdate.c 284 Warning 225: pointer type mismatch
+                               "struct IntuitionBase *" does not match "struct Library *"
+
+====================
+        return (buffer[0] == 'y' || buffer[0] == 'Y') ?  1  :  0 [33;7m;[0m
+QuickUpdate.c 411 Warning 85: return value mismatch for function "GetUserResponse"
+                              Expecting "BOOL", found "int"
+
+====================
+        [33;7mstruct[0m EasyStruct es = {
+QuickUpdate.c 611 Error 218: declaration found in statement block
+
+====================
+        if ((AppIcon = GetDiskObject[33;7m([0m"PROGDIR:QuickUpdate")))
+QuickUpdate.c 669 Warning 100: no prototype declared for function "GetDiskObject"
+
+====================
+        if ((AppIcon = GetDiskObject("PROGDIR:QuickUpdate")[33;7m)[0m)
+QuickUpdate.c 669 Warning 225: pointer type mismatch
+                               "struct DiskObject *" does not match "int"
+
+====================
+            if (AddAppIconA[33;7m([0m0, 0, "QuickUpdate",
+QuickUpdate.c 674 Warning 100: no prototype declared for function "AddAppIconA"
+
+====================
+            FreeDiskObject[33;7m([0mAppIcon);
+QuickUpdate.c 679 Warning 100: no prototype declared for function "FreeDiskObject"
+
+====================
+        if (StrToDate(&dt, (STRPTR)p[33;7m)[0m)
+QuickUpdate.c 830 Warning 87: argument count incorrect, expecting 1 arguments
+                              See line 185 file "include:clib/dos_protos.h"
+sc failed returncode 20

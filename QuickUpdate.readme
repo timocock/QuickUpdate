@@ -1,0 +1,95 @@
+Short:        Library version checker and updater for AmigaOS 3.x
+Author:       [Your name here]
+Uploader:     [Your handle here]
+Type:         util/libs
+Version:      1.0
+Architecture: m68k-amigaos >= 3.0
+Distribution: Aminet
+Requires:     AmigaOS 3.0 or higher
+
+INTRODUCTION
+~~~~~~~~~~~~
+QuickUpdate is a comprehensive library version management utility for AmigaOS 3.x
+systems. It provides both a command-line interface and a Workbench GUI for checking
+and updating system libraries. The tool helps maintain system stability by ensuring
+all libraries are at their recommended versions.
+
+FEATURES
+~~~~~~~~
+- Checks installed library versions against a maintained database
+- Calculates CRC32 checksums to verify file integrity
+- Displays detailed version information including origin
+- Supports both CLI and Workbench operation
+- Maintains a database of known good library versions
+- Shows version comparison details before updates
+- Handles both version string and datestamp-based versioning
+
+INSTALLATION
+~~~~~~~~~~~
+1. Copy QuickUpdate to a directory of your choice
+2. Copy QuickUpdate.db to PROGDIR: (same directory as the executable)
+3. For Workbench usage, ensure the .info file is present
+4. Assign PROGDIR: to the installation directory
+
+USAGE
+~~~~~
+From CLI:
+    QuickUpdate LIBRARY=<path> SCAN/S UPDATE/S QUIET/S
+
+    LIBRARY  - Path to specific library to check
+    SCAN     - Scan system for outdated libraries
+    UPDATE   - Perform updates where needed
+    QUIET    - Suppress non-essential output
+
+From Workbench:
+    Double-click the icon and use the graphical interface.
+
+DATABASE FORMAT
+~~~~~~~~~~~~~
+The QuickUpdate.db file contains entries in the following format:
+    <checksum>|<filesize>|<filename>|<version>|<revision>|<origin>
+
+You can use CreateDB to maintain and update the database.
+
+TECHNICAL DETAILS
+~~~~~~~~~~~~~~~
+- Uses standard CRC32-IEEE 802.3 for checksums
+- Supports both $VER: string parsing and file datestamp checking
+- Implements safe file operations with error handling
+- Database entries are validated during loading
+- Version comparison considers version, revision, and date
+
+REQUIREMENTS
+~~~~~~~~~~~
+- AmigaOS 3.0 or higher
+- 68020 processor or better recommended
+- Sufficient RAM for file operations
+
+DISTRIBUTION
+~~~~~~~~~~~
+This software may be freely distributed as long as all components remain
+unchanged and together.
+
+LEGAL
+~~~~~
+Copyright © 2024 [Your name]
+All rights reserved.
+
+HISTORY
+~~~~~~~
+1.0  - Initial release
+     * Basic version checking functionality
+     * CRC32 checksum verification
+     * Database support
+     * CLI and Workbench interfaces
+
+BUGS
+~~~~
+Please report any bugs to [contact information]
+
+FUTURE
+~~~~~~
+- Network update capability
+- Extended version information
+- Custom database paths
+- Backup functionality 

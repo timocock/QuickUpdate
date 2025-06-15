@@ -1,0 +1,78 @@
+# SMakefile for QuickUpdate, CreateDB and Natty
+#
+# QuickUpdate - Library version checker and updater for AmigaOS 3.x
+# Natty - HUNK binary compatibility scanner for AmigaOS 3.x
+# Copyright © 2024. All rights reserved.
+
+# Compiler and linker options
+CC = sc
+CFLAGS = NOSTKCHK NOMINC STRMERGE \
+         DATA=NEAR CODE=NEAR \
+         OPTIMIZE OPTIMIZETIME OPTIMIZERDEPTH=5 \
+         INCLUDEDIR=include: INCLUDEDIR=netinclude: \
+         PARAMETERS=REGISTERS DEBUG=LINE 
+
+# Memory model settings
+MEMFLAGS = SMALLCODE SMALLDATA
+
+# Library dependencies
+LIBS = LIB sc:lib/sc.lib LIB lib:small.lib
+
+# Object files
+OBJS = Shared.o QuickUpdate.o
+OBJS_CREATEDB = Shared.o CreateDB.o
+OBJS_NATTY = natty.o
+
+# Main targets
+.all: QuickUpdate CreateDB Natty
+
+QuickUpdate: $(OBJS)
+    $(CC) $(CFLAGS) $(MEMFLAGS) LINK WITH <<
+FROM $(OBJS)
+TO $@
+$(LIBS)
+<
+
+CreateDB: $(OBJS_CREATEDB)
+    $(CC) $(CFLAGS) $(MEMFLAGS) LINK WITH <<
+FROM $(OBJS_CREATEDB)
+TO $@
+$(LIBS)
+<
+
+Natty: $(OBJS_NATTY)
+    $(CC) $(CFLAGS) $(MEMFLAGS) LINK WITH <<
+FROM $(OBJS_NATTY)
+TO $@
+$(LIBS)
+<
+
+# Generic compile rule
+.c.o:
+    $(CC) $(CFLAGS) $(MEMFLAGS) OBJECTNAME=$@ $*.c
+
+# Explicit dependencies
+QuickUpdate.o: QuickUpdate.c QuickUpdate.h Shared.h
+    $(CC) $(CFLAGS) $(MEMFLAGS) OBJNAME=$@ QuickUpdate.c
+
+CreateDB.o: CreateDB.c CreateDB.h Shared.h
+    $(CC) $(CFLAGS) $(MEMFLAGS) OBJNAME=$@ CreateDB.c
+
+Shared.o: Shared.c Shared.h
+    $(CC) $(CFLAGS) $(MEMFLAGS) OBJNAME=$@ Shared.c
+
+natty.o: natty.c
+    $(CC) $(CFLAGS) $(MEMFLAGS) OBJNAME=$@ natty.c
+
+# Clean target
+.clean:
+    -delete \#?.o \#?.lnk QuickUpdate CreateDB Natty QUIET
+
+# Install target
+.install:
+    copy QuickUpdate TO INSTALLDIR:
+    copy CreateDB TO INSTALLDIR:
+    copy Natty TO INSTALLDIR:
+    copy QuickUpdate.info TO INSTALLDIR:
+    copy CreateDB.info TO INSTALLDIR:
+    copy Natty.info TO INSTALLDIR: 

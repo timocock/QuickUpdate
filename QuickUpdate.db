@@ -1,0 +1,5 @@
+# QuickUpdate Checksum Database
+# Format: CHECKSUM|FILENAME|VERSION.REVISION|DATE|ORIGIN
+# Example:
+12345678|locale.library|38.0|20040228|AmigaOS 3.1
+87654321|icon.library|39.1|20050315|AmigaOS 3.9 
